@@ -1,0 +1,49 @@
+name: Docker CI/CD
+
+on:
+  push:
+    branches:
+      - main  # Trigger on pushes to the main branch
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:19.03.12  # Use a Docker version that meets your needs
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_ID }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build client Docker image for testing
+        run: docker build -t docker/checkpoint -f ./client/Dockerfile.dev ./client
+
+      - name: Run tests
+        run: docker run -e CI=true docker/checkpoint npm test
+
+      - name: Build Docker images for deployment
+        run: |
+          docker build -t docker/checkpoint-client ./client
+          docker build -t docker/checkpoint-api ./server
+          docker build -t docker/checkpoint-worker ./worker
+          docker build -t docker/checkpoint-nginx ./nginx
+
+      - name: Push images to Docker Hub
+        run: |
+          docker push docker/checkpoint-client
+          docker push docker/checkpoint-api
+          docker push docker/checkpoint-worker
+          docker push docker/checkpoint-nginx
