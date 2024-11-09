@@ -1,9 +1,6 @@
-name: Docker CI/CD
+name: Docker CI
 
 on:
-  push:
-    branches:
-      - main  # Trigger on pushes to the main branch
   pull_request:
     branches:
       - main
@@ -21,29 +18,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_ID }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
+        
       - name: Build client Docker image for testing
         run: docker build -t docker/checkpoint -f ./client/Dockerfile.dev ./client
 
       - name: Run tests
         run: docker run -e CI=true docker/checkpoint npm test
-
-      - name: Build Docker images for deployment
-        run: |
-          docker build -t ${{ secrets.DOCKER_ID }}/checkpoint-client ./client
-          docker build -t ${{ secrets.DOCKER_ID }}/checkpoint-api ./server
-          docker build -t ${{ secrets.DOCKER_ID }}/checkpoint-worker ./worker
-          docker build -t ${{ secrets.DOCKER_ID }}/checkpoint-nginx ./nginx
-
-      - name: Push images to Docker Hub
-        run: |
-          docker push ${{ secrets.DOCKER_ID }}/checkpoint-client
-          docker push ${{ secrets.DOCKER_ID }}/checkpoint-api
-          docker push ${{ secrets.DOCKER_ID }}/checkpoint-worker
-          docker push ${{ secrets.DOCKER_ID }}/checkpoint-nginx
