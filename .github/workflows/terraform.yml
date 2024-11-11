@@ -1,0 +1,73 @@
+name: Create Environment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up AWS CLI
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2  # Replace with your region
+
+    - name: Check if Elastic Beanstalk Environment Exists
+      id: check_eb_env
+      run: |
+        ENV_NAME="${{ secrets.ELASTIC_BEANSTALK_ENV_NAME }}"
+        APP_NAME="${{ secrets.ELASTIC_BEANSTALK_APP_NAME }}"
+        
+        # Describe the environment to see if it exists
+        aws elasticbeanstalk describe-environments \
+          --application-name "$APP_NAME" \
+          --environment-names "$ENV_NAME" \
+          --query 'Environments[?Status!=`Terminated`].[EnvironmentName]' \
+          --output text > env_status.txt
+
+        # Set output based on whether environment name was found
+        if [[ -s env_status.txt ]]; then
+          echo "Environment $ENV_NAME exists."
+          echo "::set-output name=exists::true"
+        else
+          echo "Environment $ENV_NAME does not exist."
+          echo "::set-output name=exists::false"
+        fi
+
+    - name: Set up Terraform
+      if: steps.check_eb_env.outputs.exists == 'false'
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.5.5  # Adjust if needed
+
+    - name: Terraform Init
+      if: steps.check_eb_env.outputs.exists == 'false'
+      run: terraform init
+
+    - name: Terraform Plan
+      if: steps.check_eb_env.outputs.exists == 'false'
+      env:
+        ENV_VAR1: ${{ secrets.ENV_VAR1 }}
+        ENV_VAR2: ${{ secrets.ENV_VAR2 }}
+      run: terraform plan -var "eb_environment_variables={
+              ENV_VAR1 = \"${{ secrets.ENV_VAR1 }}\",
+              ENV_VAR2 = \"${{ secrets.ENV_VAR2 }}\"
+          }"
+
+    - name: Terraform Apply
+      if: steps.check_eb_env.outputs.exists == 'false'
+      env:
+        ENV_VAR1: ${{ secrets.ENV_VAR1 }}
+        ENV_VAR2: ${{ secrets.ENV_VAR2 }}
+      run: terraform apply -auto-approve -var "eb_environment_variables={
+              ENV_VAR1 = \"${{ secrets.ENV_VAR1 }}\",
+              ENV_VAR2 = \"${{ secrets.ENV_VAR2 }}\"
+          }"
